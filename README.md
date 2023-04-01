@@ -61,7 +61,7 @@ Example:
 python seq_hunter.py NC_000852 NC_007346 --source GenBank
 ```
 
-Once the script finishes executing, you'll find the downloaded sequences in the current directory, saved as individual GenBank files with the format `<assembly_accession>.gb`. Additionally, a file named `organisms.tsv` will be generated, containing a list of the accession numbers and the corresponding organisms.
+Once the script finishes executing, you'll find the downloaded sequences in the current directory, saved as individual GenBank files with the format `<assembly_accession>.gb`. Additionally, a file named `assemblies_<datestamp>.tsv` will be generated, containing a list of the accession numbers and the corresponding organism names.
 
 Troubleshooting
 ---------------
