@@ -1,7 +1,7 @@
-seq_hunter NCBI Nucleotide Sequence Downloader
+seq_hunter NCBI Assembly Sequence Downloader
 ===================================
 
-This repository provides a Python script that allows you to download nucleotide sequences from the National Center for Biotechnology Information (NCBI) database by providing accession numbers. The script is user-friendly, and the following guide will help you set up and use the script effectively.
+This repository provides a Python script that allows you to download entire assemblies from the National Center for Biotechnology Information (NCBI) database by providing accession numbers. The script is user-friendly, and the following guide will help you set up and use the script effectively.
 
 Prerequisites
 -------------
