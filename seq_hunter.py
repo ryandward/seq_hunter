@@ -199,7 +199,7 @@ def save_sequences_to_file(assemblies_sequences):
         transient=False,
     ) as progress:
         save_task = progress.add_task(
-            "[3/3] Saving sequences to files...", total=total_sequences
+            "[3/3] Saving sequences to files...", total=len(assemblies_sequences)
         )
 
         # Write header to organisms file
@@ -209,20 +209,18 @@ def save_sequences_to_file(assemblies_sequences):
         for accession, sequences in assemblies_sequences.items():
             os.makedirs("sequences", exist_ok=True)
 
-            for sequence in sequences:
-                sequence_id = sequence.id.replace(":", "_")
-                file_path = f"sequences/{sequence_id}.gb"
+            file_path = f"sequences/{accession}.gb"
 
-                try:
-                    with open(file_path, "w") as output_handle:
-                        SeqIO.write(sequence, output_handle, "genbank")
-                except IOError as e:
-                    console.print(
-                        f"[bold red]Error while writing sequence to file {file_path}: {str(e)}"
-                    )
-                    continue
+            try:
+                with open(file_path, "w") as output_handle:
+                    SeqIO.write(sequences, output_handle, "genbank")
+            except IOError as e:
+                console.print(
+                    f"[bold red]Error while writing sequence to file {file_path}: {str(e)}"
+                )
+                continue
 
-                progress.update(save_task, advance=1, refresh=True)
+            progress.update(save_task, advance=1, refresh=True)
 
             # Check that all organisms in the assembly are the same
             organisms = {seq.annotations["organism"] for seq in sequences}
