@@ -30,10 +30,15 @@ def write_bed(records, output_bed):
                 feature_type = feature.type.strip()
                 product = feature.qualifiers.get('product', [''])[0].strip()
 
-                bed_line = [record.id.strip(), str(feature.location.start), str(feature.location.end),
-                            locus_tag, gene_name, strand, feature_type, product]
-                bed_file.write('\t'.join(bed_line) + '\n')
-
+                if isinstance(feature.location, FeatureLocation):
+                    start, end = feature.location.start, feature.location.end
+                    bed_line = [record.id.strip(), str(start), str(end), locus_tag, gene_name, strand, feature_type, product]
+                    bed_file.write('\t'.join(bed_line) + '\n')
+                else:  # CompoundLocation
+                    for part in feature.location.parts:
+                        start, end = part.start, part.end
+                        bed_line = [record.id.strip(), str(start), str(end), locus_tag, gene_name, strand, feature_type, product]
+                        bed_file.write('\t'.join(bed_line) + '\n')
 
 def write_fna(records, output_fna):
     with open(output_fna, 'w') as fna_file:
