@@ -127,6 +127,7 @@ def fetch_assembly_data(accession_numbers, source):
                         "ftp_path": summary["DocumentSummarySet"]["DocumentSummary"][0][f"FtpPath_{source}"]
                     })
 
+            console.print(summary["DocumentSummarySet"]["DocumentSummary"][0]["Synonym"]["Genbank"])
             progress.update(fetch_task, advance=1, refresh=True)
 
     return assembly_data
