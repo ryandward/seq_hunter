@@ -100,10 +100,18 @@ def fetch_assembly_data(accession_numbers, source):
                     )
                     continue
 
+                if source == "GenBank":
+                    accession_key = "Genbank"
+                elif source == "RefSeq":
+                    accession_key = "RefSeq"
+                else:
+                    raise ValueError(f"Source not found in records: {source}")
+
                 assembly_data.append({
-                    "accession": summary["DocumentSummarySet"]["DocumentSummary"][0]["AssemblyAccession"],
+                    "accession": summary["DocumentSummarySet"]["DocumentSummary"][0]["Synonym"][accession_key],
                     "ftp_path": summary["DocumentSummarySet"]["DocumentSummary"][0][f"FtpPath_{source}"]
                 })
+                
             else:
                 for assembly_id in record["IdList"]:
                     try:
@@ -122,12 +130,18 @@ def fetch_assembly_data(accession_numbers, source):
                         )
                         continue
 
+                    if source == "GenBank":
+                        accession_key = "Genbank"
+                    elif source == "RefSeq":
+                        accession_key = "RefSeq"
+                    else:
+                        raise ValueError(f"Source not found in records: {source}")
+
                     assembly_data.append({
-                        "accession": summary["DocumentSummarySet"]["DocumentSummary"][0]["AssemblyAccession"],
+                        "accession": summary["DocumentSummarySet"]["DocumentSummary"][0]["Synonym"][accession_key],
                         "ftp_path": summary["DocumentSummarySet"]["DocumentSummary"][0][f"FtpPath_{source}"]
                     })
 
-            console.print(summary["DocumentSummarySet"]["DocumentSummary"][0]["Synonym"]["Genbank"])
             progress.update(fetch_task, advance=1, refresh=True)
 
     return assembly_data
