@@ -16,7 +16,7 @@ Installation and Setup
 Clone this repository to your local machine:
 
 ```bash
-git clone https://github.com/yourusername/seq_hunter.git
+git clone https://github.com/ryandward/seq_hunter.git
 ```
 
 Change to the cloned directory:
