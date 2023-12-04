@@ -1,5 +1,6 @@
 seq_hunter NCBI Assembly Sequence Downloader
 ===================================
+[![DOI](https://zenodo.org/badge/{622284759}.svg)](https://zenodo.org/badge/latestdoi/{622284759})
 
 This repository provides a Python script that allows you to download entire assemblies from the National Center for Biotechnology Information (NCBI) database by providing any kind of accession numbers. The script is user-friendly, and the following guide will help you set up and use the script effectively.
 
