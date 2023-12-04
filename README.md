@@ -58,7 +58,7 @@ Replace `<accession_numbers>` with one or more space-separated accession numbers
 Example:
 
 ```bash
-python seq_hunter.py NC_000852 NC_007346 --source GenBank
+python seq_hunter.py GCF_000005845.2 --source RefSeq
 ```
 
 Once the script finishes executing, you'll find the downloaded sequences in the current directory, saved as individual GenBank files with the format `<assembly_accession>.gb`. Additionally, a file named `assemblies_<datestamp>.tsv` will be generated, containing a list of the accession numbers and the corresponding organism names.
