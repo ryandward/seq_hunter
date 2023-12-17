@@ -4,24 +4,20 @@ import gzip
 import zlib
 import argparse
 import configparser
-import time
 import os
 from urllib.request import urlretrieve
 from urllib.error import HTTPError, URLError
 from Bio import Entrez
 from Bio import SeqIO
-from rich.progress import (
-    Progress,
-    BarColumn,
-    TextColumn,
-    TimeElapsedColumn,
-    TimeRemainingColumn,
-)
+from rich.progress import Progress, BarColumn, TextColumn
 from rich.console import Console
+from rich.table import Table
 
 DESCRIPTION_WIDTH = 40
 CONFIG_FILE = "config.ini"
+DOWNLOAD_LOG_FILE = "download_log.tsv"
 console = Console()
+
 
 def get_email():
     """Retrieve or prompt for the user's email for NCBI Entrez API."""
@@ -31,260 +27,170 @@ def get_email():
     if not config.has_section("Entrez"):
         config.add_section("Entrez")
 
-    if not config.has_option("Entrez", "email"):
-        console.print("NCBI requires an email address for its API usage.", style="cyan")
+    email = config.get("Entrez", "email", fallback=None)
+    if email is None:
+        console.print(
+            "NCBI requires an email address for its API usage.", style="cyan")
         email = input("Please enter your email address: ")
         config.set("Entrez", "email", email)
-
         with open(CONFIG_FILE, "w") as configfile:
             config.write(configfile)
     else:
-        email = config.get("Entrez", "email")
         console.print(f"Using stored email address: {email}", style="cyan")
 
     return email
 
-# Set your email for NCBI Entrez
-Entrez.email = get_email()
 
-def download_sequences_by_accession(accession_numbers, source):
-    """Download sequences from NCBI by accession numbers and the specified source."""
-    assembly_data = fetch_assembly_data(accession_numbers, source)
-    assemblies_sequences = download_assemblies_sequences(assembly_data, source)
-    return assemblies_sequences
-
-def fetch_assembly_data(accession_numbers, source):
+def fetch_assembly_data(accession_numbers, source, progress):
     """Fetch assembly data for the given accession numbers and source."""
     assembly_data = []
+    fetch_task = progress.add_task(
+        "[1/3] Fetching assembly accessions...", total=len(accession_numbers))
 
-    with Progress(
-        TextColumn(
-            f"[bold cyan]{{task.description:<{DESCRIPTION_WIDTH}}}", justify="left"
-        ),
-        BarColumn(bar_width=None),
-        TextColumn("{task.percentage:>3.0f}%", justify="right"),
-        transient=False,
-    ) as progress:
-        fetch_task = progress.add_task(
-            "[1/3] Fetching assembly accessions...", total=len(accession_numbers)
-        )
+    for accession_number in accession_numbers:
+        db = "nuccore" if len(accession_number) == 11 else "assembly"
+        handle = Entrez.esearch(db=db, term=accession_number)
+        record = Entrez.read(handle)
 
-        for accession_number in accession_numbers:
-            db = "nuccore" if len(accession_number) == 11 else "assembly"
-            handle = Entrez.esearch(db=db, term=accession_number)
-            record = Entrez.read(handle)
-
-            if not record["IdList"]:
-                console.print(
-                    f"[bold red]Accession number not found: {accession_number}"
-                )
-                progress.update(fetch_task, advance=1, refresh=True)
-                continue
-
-           
-            if db == "nuccore":
-                assembly_id = record["IdList"][0]
-                try:
-                    handle = Entrez.esummary(db="assembly", id=assembly_id)
-                except (HTTPError, URLError) as e:
-                    console.print(
-                        f"[bold red]Error while fetching assembly summary for {assembly_id}: {str(e)}"
-                    )
-                    continue
-
-                try:
-                    summary = Entrez.read(handle)
-                except RuntimeError as e:
-                    console.print(
-                        f"[bold red]Error while reading assembly summary for {assembly_id}: {str(e)}"
-                    )
-                    continue
-
-                if source == "GenBank":
-                    accession_key = "Genbank"
-                elif source == "RefSeq":
-                    accession_key = "RefSeq"
-                else:
-                    raise ValueError(f"Source not found in records: {source}")
-
-                assembly_data.append({
-                    "accession": summary["DocumentSummarySet"]["DocumentSummary"][0]["Synonym"][accession_key],
-                    "ftp_path": summary["DocumentSummarySet"]["DocumentSummary"][0][f"FtpPath_{source}"]
-                })
-                
-            else:
-                for assembly_id in record["IdList"]:
-                    try:
-                        handle = Entrez.esummary(db="assembly", id=assembly_id)
-                    except (HTTPError, URLError) as e:
-                        console.print(
-                            f"[bold red]Error while fetching assembly summary for {assembly_id}: {str(e)}"
-                        )
-                        continue
-
-                    try:
-                        summary = Entrez.read(handle)
-                    except RuntimeError as e:
-                        console.print(
-                            f"[bold red]Error while reading assembly summary for {assembly_id}: {str(e)}"
-                        )
-                        continue
-
-                    if source == "GenBank":
-                        accession_key = "Genbank"
-                    elif source == "RefSeq":
-                        accession_key = "RefSeq"
-                    else:
-                        raise ValueError(f"Source not found in records: {source}")
-
-                    assembly_data.append({
-                        "accession": summary["DocumentSummarySet"]["DocumentSummary"][0]["Synonym"][accession_key],
-                        "ftp_path": summary["DocumentSummarySet"]["DocumentSummary"][0][f"FtpPath_{source}"]
-                    })
-
+        if not record["IdList"]:
+            console.print(
+                f"[bold red]Accession number not found: {accession_number}")
             progress.update(fetch_task, advance=1, refresh=True)
+            continue
+
+        assembly_id = record["IdList"][0]
+        try:
+            handle = Entrez.esummary(db="assembly", id=assembly_id)
+            summary = Entrez.read(handle)
+        except (HTTPError, URLError, RuntimeError) as e:
+            console.print(
+                f"[bold red]Error while processing {assembly_id}: {str(e)}")
+            continue
+
+        accession_key = "Genbank" if source == "GenBank" else "RefSeq"
+        assembly_data.append({
+            "accession": summary["DocumentSummarySet"]["DocumentSummary"][0]["Synonym"][accession_key],
+            "ftp_path": summary["DocumentSummarySet"]["DocumentSummary"][0][f"FtpPath_{source}"]
+        })
+        progress.update(fetch_task, advance=1, refresh=True)
 
     return assembly_data
 
-def download_assemblies_sequences(assembly_data, source):
+
+def download_assemblies_sequences(assembly_data, source, progress):
     """Download sequences for the given assembly data."""
     assemblies_sequences = {}
+    download_task = progress.add_task(
+        "[2/3] Downloading sequences...", total=len(assembly_data))
 
-    with Progress(
-        TextColumn(
-            f"[bold cyan]{{task.description:<{DESCRIPTION_WIDTH}}}", justify="left"
-        ),
-        BarColumn(bar_width=None),
-        TextColumn("{task.percentage:>3.0f}%", justify="right"),
-        transient=False,
-    ) as progress:
-        download_task = progress.add_task(
-            "[2/3] Downloading sequences...", total=len(assembly_data)
-        )
+    for assembly in assembly_data:
+        ftp_path = assembly["ftp_path"]
+        if not ftp_path:
+            continue
 
-        for assembly in assembly_data:
-            ftp_path = assembly["ftp_path"]
-            if ftp_path:
-                genbank_file_name = ftp_path.split("/")[-1] + f"_genomic.gbff.gz"
-                genbank_url = f"{ftp_path}/{genbank_file_name}"
+        genbank_file_name = ftp_path.split("/")[-1] + f"_genomic.gbff.gz"
+        genbank_url = f"{ftp_path}/{genbank_file_name}"
 
-                try:
-                    compressed_file, _ = urlretrieve(genbank_url)
-                except URLError as e:
-                    console.print(
-                        f"[bold red]Error while downloading sequence for accession {assembly['accession']}: {str(e)}"
-                    )
-                    continue
+        try:
+            compressed_file, _ = urlretrieve(genbank_url)
+            with gzip.open(compressed_file, 'rt') as compressed_handle:
+                sequences = list(SeqIO.parse(compressed_handle, "genbank"))
+            assemblies_sequences[assembly['accession']] = sequences
+        except (URLError, zlib.error, ValueError) as e:
+            console.print(
+                f"[bold red]Error for accession {assembly['accession']}: {str(e)}")
+            continue
 
-                try:
-                    with gzip.open(compressed_file, 'rt') as compressed_handle:
-                        try:
-                            sequences = list(SeqIO.parse(compressed_handle, "genbank"))
-                        except ValueError as e:
-                            console.print(
-                                f"[bold red]Error while parsing sequence for accession {assembly['accession']}: {str(e)}"
-                            )
-                            continue
-
-                        assemblies_sequences[assembly['accession']] = sequences
-                except zlib.error as e:
-                    console.print(
-                        f"[bold red]Error while opening gzipped file for accession {assembly['accession']}: {str(e)}"
-                    )
-                    continue
-
-            progress.update(download_task, advance=1, refresh=True)
+        progress.update(download_task, advance=1, refresh=True)
 
     return assemblies_sequences
 
 
-def save_sequences_to_file(assemblies_sequences):
+def save_sequences_to_file(assemblies_sequences, progress):
     """Save the downloaded sequences to individual files."""
-    total_sequences = sum(len(sequences) for sequences in assemblies_sequences.values())
-
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     assemblies_file_name = f"assemblies_{timestamp}.tsv"
+    save_task = progress.add_task(
+        "[3/3] Saving sequences to files...", total=len(assemblies_sequences))
 
-    with Progress(
-        TextColumn(
-            f"[bold cyan]{{task.description:<{DESCRIPTION_WIDTH}}}", justify="left"
-        ),
-        BarColumn(bar_width=None),
-        TextColumn("{task.percentage:>3.0f}%", justify="right"),
-        transient=False,
-    ) as progress:
-        save_task = progress.add_task(
-            "[3/3] Saving sequences to files...", total=len(assemblies_sequences)
-        )
+    assemblies_info = []
 
-        # Write header to organisms file
-        with open(assemblies_file_name, "w") as assemblies_file:
-            assemblies_file.write("AssemblyAccession\tOrganism\n")
-
+    with open(assemblies_file_name, "w") as assemblies_file:
+        assemblies_file.write("AssemblyAccession\tOrganism\tFilePath\n")
         for accession, sequences in assemblies_sequences.items():
-            os.makedirs("sequences", exist_ok=True)
-
-            file_path = f"sequences/{accession}.gb"
-
+            file_path = os.path.abspath(f"sequences/{accession}.gb")
             try:
+                os.makedirs("sequences", exist_ok=True)
                 with open(file_path, "w") as output_handle:
                     SeqIO.write(sequences, output_handle, "genbank")
+                organism = next(
+                    iter({seq.annotations["organism"] for seq in sequences}), "Unknown")
+                assemblies_file.write(
+                    f"{accession}\t{organism}\t{file_path}\n")
+                assemblies_info.append((accession, organism, file_path))
             except IOError as e:
                 console.print(
-                    f"[bold red]Error while writing sequence to file {file_path}: {str(e)}"
-                )
+                    f"[bold red]Error writing file {file_path}: {str(e)}")
                 continue
 
             progress.update(save_task, advance=1, refresh=True)
 
-            # Check that all organisms in the assembly are the same
-            organisms = {seq.annotations["organism"] for seq in sequences}
-            if len(organisms) == 1:
-                organism = organisms.pop()
-                with open(assemblies_file_name, "a") as assemblies_file:
-                    assemblies_file.write(f"{accession}\t{organism}\n")
-    
-    return assemblies_file_name
+    return assemblies_file_name, assemblies_info
+
+
+def append_to_download_log(assemblies_info):
+    """Append the downloaded sequences information to the running log file."""
+    with open(DOWNLOAD_LOG_FILE, "a") as log_file:
+        if os.stat(DOWNLOAD_LOG_FILE).st_size == 0:
+            log_file.write("Timestamp\tAccession\tOrganism\tFilePath\n")
+
+        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        for accession, organism, file_path in assemblies_info:
+            log_file.write(
+                f"{timestamp}\t{accession}\t{organism}\t{file_path}\n")
+
+
+def display_assemblies_table(assemblies_info):
+    """Display the contents of the assemblies information in a rich table."""
+    table = Table(title="Assemblies Information")
+    table.add_column("Accession", justify="left")
+    table.add_column("Organism", justify="left")
+    table.add_column("File Path", justify="left")
+
+    for accession, organism, file_path in assemblies_info:
+        table.add_row(accession, organism, file_path)
+
+    console.print(table)
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Download sequences from NCBI by accession numbers."
-    )
-    parser.add_argument(
-        "accession_numbers",
-        metavar="ACCESSION",
-        nargs="+",
-        help="An accession number of a sequence to download.",
-    )
-    parser.add_argument(
-        "-s",
-        "--source",
-        choices=["GenBank", "RefSeq"],
-        default="GenBank",
-        help="The source database of the sequences (default: %(default)s).",
-    )
-
+        description="Download sequences from NCBI by accession numbers.")
+    parser.add_argument("accession_numbers", metavar="ACCESSION",
+                        nargs="+", help="An accession number of a sequence to download.")
+    parser.add_argument("-s", "--source", choices=["GenBank", "RefSeq"], default="GenBank",
+                        help="The source database of the sequences (default: %(default)s).")
     args = parser.parse_args()
 
+    Entrez.email = get_email()
+
     try:
-        assemblies_sequences = download_sequences_by_accession(
-            args.accession_numbers, args.source
-        )
-        assemblies_file_name = save_sequences_to_file(assemblies_sequences)
+        with Progress(TextColumn(f"[bold cyan]{{task.description:<{DESCRIPTION_WIDTH}}}", justify="left"), BarColumn(bar_width=None), TextColumn("{task.percentage:>3.0f}%", justify="right"), transient=False) as progress:
+            assembly_data = fetch_assembly_data(
+                args.accession_numbers, args.source, progress)
+            assemblies_sequences = download_assemblies_sequences(
+                assembly_data, args.source, progress)
+            _, assemblies_info = save_sequences_to_file(
+                assemblies_sequences, progress)
+
+        append_to_download_log(assemblies_info)
+        console.print(
+            f"[bold green]Download complete! {len(assemblies_sequences)} new sequences added to '{DOWNLOAD_LOG_FILE}'.", style="bold green")
+        display_assemblies_table(assemblies_info)
     except KeyboardInterrupt:
         console.print("\n[bold red]Interrupted by user. Exiting.")
         sys.exit(1)
 
-    console.print(
-        "[bold green]Script completed successfully.",
-        style="bold green",
-    )
-    console.print(
-        "Please check the 'sequences' folder for the downloaded sequences,",
-        f"and '{assemblies_file_name}' for a list of the accession numbers and organisms.",
-        style="bold yellow",
-    )
 
 if __name__ == "__main__":
     main()
