@@ -21,7 +21,7 @@ def write_fasta(records, output_fasta):
 def format_feature(feature, record_id):
     locus_tag = feature.qualifiers.get('locus_tag', [''])[0].strip()
     gene_name = feature.qualifiers.get('gene', [''])[0].strip()
-    strand = '+' if feature.location.strand > 0 else '-'
+    strand = '+' if feature.location.strand and feature.location.strand > 0 else '-'
     feature_type = feature.type.strip()
     product = feature.qualifiers.get('product', [''])[0].strip()
     start, end = feature.location.start, feature.location.end
